@@ -4,6 +4,12 @@ import { fileSave } from "browser-fs-access"
 import { Api as RevealApi } from "reveal.js"
 
 import {
+    DefaultToolbar,
+	DefaultToolbarContent,
+	TLComponents,
+	useEditor,
+	useIsToolSelected,
+	useTools,
     Box,
     Editor,
     Tldraw,
@@ -38,7 +44,39 @@ import {
     TldrawUiMenuCheckboxItem,
     TLStore,
     TLStoreSnapshot,
+    TLSessionStateSnapshot,
+    getSnapshot,
+    loadSnapshot
 } from "tldraw"
+import {
+    SelectToolbarItem,
+    HandToolbarItem,
+    DrawToolbarItem,
+    EraserToolbarItem,
+    ArrowToolbarItem,
+    TextToolbarItem,
+    NoteToolbarItem,
+    AssetToolbarItem,
+    RectangleToolbarItem,
+    EllipseToolbarItem,
+    TriangleToolbarItem,
+    DiamondToolbarItem,
+    HexagonToolbarItem,
+    OvalToolbarItem,
+    RhombusToolbarItem,
+    StarToolbarItem,
+    CloudToolbarItem,
+    XBoxToolbarItem,
+    CheckBoxToolbarItem,
+    ArrowLeftToolbarItem,
+    ArrowUpToolbarItem,
+    ArrowDownToolbarItem,
+    ArrowRightToolbarItem,
+    LineToolbarItem,
+    HighlightToolbarItem,
+    LaserToolbarItem,
+    FrameToolbarItem
+} from "tldraw";
 import { useAtom } from "@tldraw/state"
 
 import { debounce, makeInt, parseOptionalBoolean } from "./util"
@@ -159,11 +197,15 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     const [store] = useState(() => createTLStore({ shapeUtils: defaultShapeUtils }))
     const [editor, setEditor] = useState<Editor | undefined>()
 
+    // BROKEN IN NEW VERSION OF TLDRAW ?
     // Use a local user preferences atom, to prevent sharing dark mode status
     // across multiple instances
-    const userPreferences = useAtom<TLUserPreferences>("userPreferences", { id: "tldreveal", isDarkMode: config.isDarkMode })
+    // const userPreferences = useAtom<TLUserPreferences>("userPreferences", { id: "tldreveal", isDarkMode: config.isDarkMode })
+    // const [isolatedUser] = useState(() => createTLUser({ userPreferences, setUserPreferences: userPreferences.set }))
+    // TEMPORARY FIX
+    const userPreferences = useAtom<TLUserPreferences>("userPreferences", { id: "tldreveal" })
     const [isolatedUser] = useState(() => createTLUser({ userPreferences, setUserPreferences: userPreferences.set }))
-
+    
     const [saveToLocalStorage, setSaveToLocalStorage_] = 
         useState(parseOptionalBoolean(localStorage.getItem(saveToLocalStorageKey)) ?? config.useLocalStorage)
     
@@ -209,15 +251,17 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
 
     const currentSlideId = useMemo(() => getSlideId(currentSlide), [ currentSlide ])
 
-    function getTimestampedSnapshot(store: TLStore) : TLStoreSnapshot & { timestamp: number } {
+    function getTimestampedSnapshot(store: TLStore) : TLStoreSnapshot & TLSessionStateSnapshot & { timestamp: number } {
+        const { document, session } = getSnapshot(store)
         return {
             timestamp: Date.now(),
-            ...store.getSnapshot()
+            ...document,
+            ...session
         }
     }
 
     async function loadInitial(store: TLStore) {
-        let localStorageSnapshot: (TLStoreSnapshot & { timestamp: number }) | undefined
+        let localStorageSnapshot: (TLStoreSnapshot & TLSessionStateSnapshot & { timestamp: number }) | undefined
         if (localStorageKey) {
             const snapshotJson = localStorage.getItem(localStorageKey)
             if (snapshotJson) {
@@ -225,7 +269,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             }
         }
 
-        let uriSnapshot: (TLStoreSnapshot & { timestamp: number }) | undefined
+        let uriSnapshot: (TLStoreSnapshot & TLSessionStateSnapshot & { timestamp: number }) | undefined
         if (config.snapshotUrl) {
             let uri
             if (config.snapshotUrl === "auto") {
@@ -266,7 +310,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             }
         }
 
-        let snapshot: (TLStoreSnapshot & { timestamp: number }) | undefined
+        let snapshot: (TLStoreSnapshot & TLSessionStateSnapshot & { timestamp: number }) | undefined
         if (localStorageSnapshot && uriSnapshot) {
             if (localStorageSnapshot.timestamp >= uriSnapshot.timestamp) {
                 snapshot = localStorageSnapshot
@@ -279,7 +323,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         }
 
         if (snapshot) {
-            store.loadSnapshot(snapshot)
+            loadSnapshot(store, snapshot)
         }
 
         setIsReady(true)
@@ -469,9 +513,9 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     function syncEditorBounds(state = { editor }) {
         if (state.editor) {
             // Set the correct zoom and prevent further movement
-            state.editor.updateInstanceState({ canMoveCamera: true })
+            state.editor.setCameraOptions({...state.editor.getCameraOptions(), isLocked: false })
             state.editor.zoomToBounds(bounds, { inset: 0 })
-            state.editor.updateInstanceState({ canMoveCamera: false })
+            state.editor.setCameraOptions({...state.editor.getCameraOptions(), isLocked: true })
         }
     }
 
@@ -615,6 +659,40 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         }
     }
 
+    const removeTools = ['hand'];
+    function CustomToolbar() {
+        return (
+          <DefaultToolbar>
+			<SelectToolbarItem />
+			<EraserToolbarItem />
+			<DrawToolbarItem />
+			<HighlightToolbarItem />
+			<LaserToolbarItem />
+			<ArrowToolbarItem />
+			<TextToolbarItem />
+			<LineToolbarItem />
+			<NoteToolbarItem />
+			<AssetToolbarItem />
+			<RectangleToolbarItem />
+			<EllipseToolbarItem />
+			<TriangleToolbarItem />
+			<DiamondToolbarItem />
+			<HexagonToolbarItem />
+			<OvalToolbarItem />
+			<RhombusToolbarItem />
+			<StarToolbarItem />
+			<CloudToolbarItem />
+			<XBoxToolbarItem />
+			<CheckBoxToolbarItem />
+			<ArrowLeftToolbarItem />
+			<ArrowUpToolbarItem />
+			<ArrowDownToolbarItem />
+			<ArrowRightToolbarItem />
+			<FrameToolbarItem />
+          </DefaultToolbar>
+        )
+    }
+
     if (isReady) {
         return (
             <Tldraw
@@ -629,25 +707,19 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                         fileProps: { 
                             canUseLocalStorage: localStorageKey !== undefined, 
                             saveToLocalStorage
-                        }
+                        },
                     }),
+                    Toolbar: CustomToolbar,
                     ActionsMenu: CustomActionsMenu,
                     QuickActions: CustomQuickActions
                 }}
                 overrides={{
                     translations: customTranslations,
                     tools(editor, tools) {
-                        // Remove the keyboard shortcut for the hand tool
-                        tools.hand.kbd = undefined
-                        return tools
-                    },
-                    toolbar(editor, toolbar) {
-                        // Remove the hand tool from the toolbar
-                        const handIndex = toolbar.findIndex(t => t.id === "hand")
-                        if (handIndex !== -1)
-                            toolbar.splice(handIndex, 1)
-                        return toolbar
-                    },
+                     // Remove the keyboard shortcuts for the removed tools.
+                     removeTools.forEach(tool => tools[tool].kbd = undefined)
+                     return tools
+                    }, 
                     // Remove actions related to zooming
                     actions(editor, actions) {
                         delete actions["select-zoom-tool"]
