@@ -142,6 +142,9 @@ function CustomMainMenu({ fileProps }: { fileProps: FileSubmenuProps }) {
 			<ExportFileContentSubMenu />
 			<ExtrasGroup />
 			<PreferencesGroup />
+            <TldrawUiMenuGroup id="open">
+                <TldrawUiMenuItem {...actions["tldreveal.open"]} />
+            </TldrawUiMenuGroup>
             <TldrawUiMenuGroup id="close">
                 <TldrawUiMenuItem {...actions["tldreveal.close"]} />
             </TldrawUiMenuGroup>
@@ -153,7 +156,6 @@ function CustomQuickActions() {
     const actions = useActions()
     return (
         <DefaultQuickActions>
-            <TldrawUiMenuItem {...actions["tldreveal.close"]} />
             <DefaultQuickActionsContent />
         </DefaultQuickActions>
     )
@@ -368,6 +370,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     function onTldrawMount(editor: Editor) {
         setEditor(editor)
         initializeEditor({ editor, currentSlide })
+        setIsEditing(true)
     }
 
     useEffect(() => {
@@ -570,6 +573,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             "tldreveal.menu.file": "File",
             "tldreveal.menu.clear": "Clear",
             "tldreveal.action.close": "Exit drawing mode",
+            "tldreveal.action.open": "Enter drawing mode",
             "tldreveal.action.save-file": "Save file",
             "tldreveal.action.clear-localstorage": "Clear browser storage",
             "tldreveal.action.clear-page": "Clear current slide",
@@ -590,6 +594,15 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             readonlyOk: true,
             async onSelect(_source) {
                 setIsEditing(false)
+            }
+        },
+        ["tldreveal.open"]: {
+            id: "tldreveal.open",
+            label: "tldreveal.action.open",
+            icon: "circle",
+            readonlyOk: true,
+            async onSelect(_source) {
+                setIsEditing(true)
             }
         },
         ["tldreveal.save-file"]: {
@@ -663,32 +676,32 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     function CustomToolbar() {
         return (
           <DefaultToolbar>
-			<SelectToolbarItem />
-			<EraserToolbarItem />
-			<DrawToolbarItem />
-			<HighlightToolbarItem />
-			<LaserToolbarItem />
-			<ArrowToolbarItem />
-			<TextToolbarItem />
-			<LineToolbarItem />
-			<NoteToolbarItem />
-			<AssetToolbarItem />
-			<RectangleToolbarItem />
-			<EllipseToolbarItem />
-			<TriangleToolbarItem />
-			<DiamondToolbarItem />
-			<HexagonToolbarItem />
-			<OvalToolbarItem />
-			<RhombusToolbarItem />
-			<StarToolbarItem />
-			<CloudToolbarItem />
-			<XBoxToolbarItem />
-			<CheckBoxToolbarItem />
-			<ArrowLeftToolbarItem />
-			<ArrowUpToolbarItem />
-			<ArrowDownToolbarItem />
-			<ArrowRightToolbarItem />
-			<FrameToolbarItem />
+            <SelectToolbarItem />
+            <EraserToolbarItem />
+            <DrawToolbarItem />
+            <HighlightToolbarItem />
+            <LaserToolbarItem />
+            <ArrowToolbarItem />
+            <TextToolbarItem />
+            <LineToolbarItem />
+            <NoteToolbarItem />
+            <AssetToolbarItem />
+            <RectangleToolbarItem />
+            <EllipseToolbarItem />
+            <TriangleToolbarItem />
+            <DiamondToolbarItem />
+            <HexagonToolbarItem />
+            <OvalToolbarItem />
+            <RhombusToolbarItem />
+            <StarToolbarItem />
+            <CloudToolbarItem />
+            <XBoxToolbarItem />
+            <CheckBoxToolbarItem />
+            <ArrowLeftToolbarItem />
+            <ArrowUpToolbarItem />
+            <ArrowDownToolbarItem />
+            <ArrowRightToolbarItem />
+            <FrameToolbarItem />
           </DefaultToolbar>
         )
     }
@@ -697,7 +710,11 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         return (
             <Tldraw
                 forceMobile
-                hideUi={!isEditing}
+                hideUi={false} 
+                // Can't do !isEditing on iPad w/o mouse because we can't double-click to enable focus. 
+                // Without the ability to double-click, we need the TLDraw Main Menu (top left corner) to toggle isEditing.
+                // If the menu is hidden when we toggle isEditing off, we can't toggle it back on again.
+                // TODO?: toggle isEditing with double tap of fingers or stylus.
                 store={store}
                 user={isolatedUser}
                 onMount={onTldrawMount}
