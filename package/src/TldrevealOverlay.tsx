@@ -406,18 +406,27 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             event.stopImmediatePropagation()
         }
     }
+    const handleTouchstart = (state = { isEditing }) => (event) => {
+        if(!state.isEditing && event.touches !== undefined && event.touches[0].touchType === "stylus") {
+            setIsEditing(true)
+            event.stopImmediatePropagation()
+        }
+    }
 
     useEffect(() => {
         const state = { isEditing }
         const handleKeydown_ = handleKeydown(state)
         const handleDblclick_ = handleDblclick(state)
+        const handleTouchstart_ = handleTouchstart(state)
 
         reveal.addKeyBinding({ keyCode: 68, key: "D", description: "Enter drawing mode" }, handleDKey)
         window.addEventListener("dblclick", handleDblclick_, true)
+        window.addEventListener("touchstart", handleTouchstart_, true)
         window.addEventListener("keydown", handleKeydown_, true)
         return () => {
             reveal.removeKeyBinding(68)
             window.removeEventListener("dblclick", handleDblclick_, true)
+            window.removeEventListener("touchstart", handleTouchstart_, true)
             window.removeEventListener("keydown", handleKeydown_, true)
         }
     }, [ isEditing ])
@@ -672,6 +681,16 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         }
     }
 
+    // get rid of 'Exit Pen Mode', instead doing that on menu click
+    function CustomHelperButtons() { 
+        return (
+            <DefaultHelperButtons>
+                <BackToContent />
+                <StopFollowing />
+            </DefaultHelperButtons>
+        );
+    }
+    
     const removeTools = ['hand'];
     function CustomToolbar() {
         return (
@@ -729,6 +748,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                     Toolbar: CustomToolbar,
                     ActionsMenu: CustomActionsMenu,
                     QuickActions: CustomQuickActions
+ //                   HelperButtons: CustomHelperButtons  [if you can work out how to get into tool change events, that seems like a lower-ui-overhead way to exit pen mode]
                 }}
                 overrides={{
                     translations: customTranslations,
