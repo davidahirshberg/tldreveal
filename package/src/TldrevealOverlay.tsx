@@ -156,6 +156,7 @@ function CustomQuickActions() {
     const actions = useActions()
     return (
         <DefaultQuickActions>
+            <TldrawUiMenuItem {...actions["tldreveal.close"]} />
             <DefaultQuickActionsContent />
         </DefaultQuickActions>
     )
@@ -370,7 +371,6 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     function onTldrawMount(editor: Editor) {
         setEditor(editor)
         initializeEditor({ editor, currentSlide })
-        setIsEditing(true)
     }
 
     useEffect(() => {
@@ -402,31 +402,57 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
 
     const handleDblclick = (state = { isEditing }) => (event: MouseEvent) => {
         if (!state.isEditing) {
+            event.preventDefault()
             setIsEditing(true)
-            event.stopImmediatePropagation()
         }
     }
-    const handleTouchstart = (state = { isEditing }) => (event) => {
-        if(!state.isEditing && event.touches !== undefined && event.touches[0].touchType === "stylus") {
-            setIsEditing(true)
-            event.stopImmediatePropagation()
+    const handleStylusdown = (state = { isEditing }) => (event) => {
+        if(!state.isEditing) {
+            // if we're touching with a stylus
+            if(event.touches !== undefined && event.touches[0].touchType === "stylus") {
+               // 1. enter editing mode 
+               // TODO: 2. resend event appropriately to start writing
+                    event.preventDefault()
+                    setIsEditing(true)
+            }
         }
     }
 
+    const handleFingerdown = (state = { isEditing }) => {
+        if(!state.isEditing) {
+            let lastTap = Date.now()
+            return (event) => {
+                // if this is not a stylus tap
+                if(!(event.touches !== undefined && event.touches[0].touchType === "stylus")) {
+                    const now = Date.now()
+                    // if it's our second in 500ms enter editing mode
+                    if (now < lastTap + 500) { 
+                        event.preventDefault()
+                        setIsEditing(true) 
+                    }
+                    lastTap = now;
+                }
+            }
+        }
+    }
+    
     useEffect(() => {
         const state = { isEditing }
-        const handleKeydown_ = handleKeydown(state)
-        const handleDblclick_ = handleDblclick(state)
-        const handleTouchstart_ = handleTouchstart(state)
+        const handleKeydown_    = handleKeydown(state)
+        const handleDblclick_   = handleDblclick(state)
+        const handleStylusdown_ = handleStylusdown(state)
+        const handleFingerdown_ = handleFingerdown(state)
 
         reveal.addKeyBinding({ keyCode: 68, key: "D", description: "Enter drawing mode" }, handleDKey)
         window.addEventListener("dblclick", handleDblclick_, true)
-        window.addEventListener("touchstart", handleTouchstart_, true)
+        window.addEventListener("touchstart", handleStylusdown_, true)
+        window.addEventListener("touchstart", handleFingerdown_, true)
         window.addEventListener("keydown", handleKeydown_, true)
         return () => {
             reveal.removeKeyBinding(68)
             window.removeEventListener("dblclick", handleDblclick_, true)
-            window.removeEventListener("touchstart", handleTouchstart_, true)
+            window.removeEventListener("touchstart", handleStylusdown_, true)
+            window.removeEventListener("touchstart", handleFingerdown_, true)
             window.removeEventListener("keydown", handleKeydown_, true)
         }
     }, [ isEditing ])
@@ -599,16 +625,18 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         ["tldreveal.close"]: {
             id: "tldreveal.close",
             label: "tldreveal.action.close",
-            icon: "cross",
+            icon: "cross-2",
             readonlyOk: true,
             async onSelect(_source) {
+                // this is how 'action.exit-pen-mode' defined in tldraw/ui/context/actions.tsx exits pen mode. 
+                // Is this the right way to do it? Should we be using that action instead?
+                editor.updateInstanceState({ isPenMode: false })
                 setIsEditing(false)
             }
         },
         ["tldreveal.open"]: {
             id: "tldreveal.open",
             label: "tldreveal.action.open",
-            icon: "circle",
             readonlyOk: true,
             async onSelect(_source) {
                 setIsEditing(true)
@@ -681,25 +709,35 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         }
     }
 
-    // get rid of 'Exit Pen Mode', instead doing that on menu click
-    function CustomHelperButtons() { 
-        return (
-            <DefaultHelperButtons>
-                <BackToContent />
-                <StopFollowing />
-            </DefaultHelperButtons>
-        );
+
+    const possiblyExitPenMode = (e) => {
+        if(!(e.touches !== undefined && e.touches[0].touchType === "stylus")) {
+            editor.updateInstanceState({ isPenMode: false })
+        }
     }
-    
+  const pemp = function(f) {
+        return function(...args) : JSX.Element {
+            return (
+            <div onTouchStart={possiblyExitPenMode}>
+                { f(...args) }
+            </div> 
+            )
+        }
+    }
+    const CustomSelectToolbarItem = pemp(SelectToolbarItem)
+    const CustomEraserToolbarItem = pemp(EraserToolbarItem)
+    const CustomDrawToolbarItem = pemp(DrawToolbarItem)
+    const CustomHighlightToolbarItem = pemp(HighlightToolbarItem)
+    const CustomLaserToolbarItem = pemp(LaserToolbarItem)
     const removeTools = ['hand'];
     function CustomToolbar() {
         return (
           <DefaultToolbar>
-            <SelectToolbarItem />
-            <EraserToolbarItem />
-            <DrawToolbarItem />
-            <HighlightToolbarItem />
-            <LaserToolbarItem />
+            <CustomSelectToolbarItem />
+            <CustomEraserToolbarItem />
+            <CustomDrawToolbarItem />
+            <CustomHighlightToolbarItem />
+            <CustomLaserToolbarItem />
             <ArrowToolbarItem />
             <TextToolbarItem />
             <LineToolbarItem />
@@ -729,11 +767,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         return (
             <Tldraw
                 forceMobile
-                hideUi={false} 
-                // Can't do !isEditing on iPad w/o mouse because we can't double-click to enable focus. 
-                // Without the ability to double-click, we need the TLDraw Main Menu (top left corner) to toggle isEditing.
-                // If the menu is hidden when we toggle isEditing off, we can't toggle it back on again.
-                // TODO?: toggle isEditing with double tap of fingers or stylus.
+                hideUi={!isEditing} 
                 store={store}
                 user={isolatedUser}
                 onMount={onTldrawMount}
@@ -748,7 +782,6 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                     Toolbar: CustomToolbar,
                     ActionsMenu: CustomActionsMenu,
                     QuickActions: CustomQuickActions
- //                   HelperButtons: CustomHelperButtons  [if you can work out how to get into tool change events, that seems like a lower-ui-overhead way to exit pen mode]
                 }}
                 overrides={{
                     translations: customTranslations,
