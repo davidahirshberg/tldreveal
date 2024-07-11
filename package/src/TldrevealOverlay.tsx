@@ -989,7 +989,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                     }
                 }}
                 >
-                <HistorySlider />
+               { /* <HistorySlider /> */ }
             </Tldraw>
         )
     }
