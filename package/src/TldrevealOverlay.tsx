@@ -82,6 +82,18 @@ import { useAtom } from "@tldraw/state"
 import { debounce, makeInt, parseOptionalBoolean } from "./util"
 import { defaultStyleProps, getTldrevealConfig } from "./config";
 
+// for history slider based on https://gist.github.com/steveruizok/232e9bf621e3d2dfaebd4f198c7e69fc
+import { RecordsDiff, TLRecord } from '@tldraw/editor'
+import { useRef } from 'react'
+// for custom panel including playback stuff
+import { DefaultToolbarProps, TldrawUiPopover, TldrawUiPopoverTrigger, TldrawUiPopoverContent, TldrawUiButton, TldrawUiButtonIcon } from 'tldraw'
+import { PORTRAIT_BREAKPOINT, useBreakpoint, useTldrawUiComponents, useReadonly } from 'tldraw'
+import { useValue } from '@tldraw/editor'
+import { ReactNode, memo } from 'react'
+//import { MobileStylePanel} from 'tldraw/src/lib/ui/components/MobileStylePanel'
+//import { OverflowingToolbar } from 'tldraw/src/lib/ui/components/Toolbar/OverflowingToolbar'
+//import { ToggleToolLockedButton } from 'tldraw/src/lib/ui/components/Toolbar/ToggleToolLockedButton'
+
 // TODO:
 // - Somehow create overlaid pages for fragment navigation
 // - Fix the overlay in scroll mode
@@ -709,13 +721,135 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         }
     }
 
+    /*
+     * History Playback Stuff
+     * based on https://gist.github.com/steveruizok/232e9bf621e3d2dfaebd4f198c7e69fc
+     */
+    function HistorySlider() {
+        const diffs = useRef<RecordsDiff<TLRecord>[]>([])
+        const pointer = useRef(0)
+        const editor = useEditor()
 
+        const handleSliderChange = (e) => {
+            const events = diffs.current
+            const curr = pointer.current
+            const prevPct = curr / 10000
+
+            const next = e.currentTarget.value
+            const nextPct = next / 10000
+
+            const prevIndex = Math.ceil(prevPct * diffs.current.length)
+            const nextIndex = Math.ceil(nextPct * diffs.current.length)
+
+            if (nextPct === 1 && editor.getInstanceState().isReadonly) {
+                editor.updateInstanceState({ isReadonly: false })
+            } else if (nextPct < 1 && !editor.getInstanceState().isReadonly) {
+                editor.updateInstanceState({ isReadonly: true })
+            }
+
+            pointer.current = next
+
+            editor.store.mergeRemoteChanges(() => {
+                if (nextIndex > prevIndex) {
+                    // console.log('redoing', prevIndex, nextIndex)
+                    for (let i = prevIndex; i <= nextIndex; i++) {
+                        const changes = events[i]
+                        if (!changes) continue
+
+                        Object.values(changes.added).forEach((record) => {
+                            editor.store.put([record])
+                        })
+
+                        Object.values(changes.updated).forEach(([prev, next]) => {
+                            editor.store.put([next])
+                        })
+
+                        Object.values(changes.removed).forEach((record) => {
+                            editor.store.remove([record.id])
+                        })
+                    }
+                } else if (nextIndex < prevIndex) {
+                    // console.log('undoing', prevIndex, nextIndex)
+                    for (let i = prevIndex; i >= nextIndex; i--) {
+                        const changes = events[i]
+                        if (!changes) continue
+
+                        Object.values(changes.added).forEach((record) => {
+                            editor.store.remove([record.id])
+                        })
+
+                        Object.values(changes.updated).forEach(([prev, next]) => {
+                            editor.store.put([prev])
+                        })
+
+                        Object.values(changes.removed).forEach((record) => {
+                            editor.store.put([record])
+                        })
+                    }
+                }
+            })
+        }
+
+        useEffect(() => {
+            return editor.store.listen(({ changes }) => diffs.current.push(changes), {
+                source: 'user',
+                scope: 'document',
+            })
+        }, [editor])
+
+        return (
+            <input
+                type="range"
+                defaultValue="10000"
+                onChange={handleSliderChange}
+                style={{
+                    position: 'absolute',
+                    top: 64,
+                    left: 8,
+                    width: 300,
+                    zIndex: 999,
+                }}
+                min="0"
+                max="10000"
+            />
+        )
+    }
+    
+    function PlaybackPanel() {
+        const editor = useEditor()
+        return (
+            <TldrawUiPopover id="playback menu">
+                <TldrawUiPopoverTrigger>
+                    <TldrawUiButton
+                        type="tool"
+                        data-testid="mobile-styles.button"
+                        title={'Playback'}
+                        disabled={false}
+                    >
+                        <TldrawUiButtonIcon
+                            icon={'cross-2'}
+                        />
+                    </TldrawUiButton>
+                </TldrawUiPopoverTrigger>
+                <TldrawUiPopoverContent side="top" align="end">
+                    <HistorySlider/>
+                </TldrawUiPopoverContent>
+            </TldrawUiPopover>
+        )
+    }
+
+    // Other Toolbar Content
+    // This is similar to the default, but with 
+    // 1. a few items shuffled
+    // 2. the hand gone
+    // 3. the most commonly-chosen items set up so, 
+    //    when you touch them with a finger, you exit pen mode
     const possiblyExitPenMode = (e) => {
         if(!(e.touches !== undefined && e.touches[0].touchType === "stylus")) {
             editor.updateInstanceState({ isPenMode: false })
         }
     }
-  const pemp = function(f) {
+    const pemp = function(f) {
         return function(...args) : JSX.Element {
             return (
             <div onTouchStart={possiblyExitPenMode}>
@@ -730,9 +864,10 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     const CustomHighlightToolbarItem = pemp(HighlightToolbarItem)
     const CustomLaserToolbarItem = pemp(LaserToolbarItem)
     const removeTools = ['hand'];
-    function CustomToolbar() {
+
+    function CustomToolbarContent() {
         return (
-          <DefaultToolbar>
+        <>
             <CustomSelectToolbarItem />
             <CustomEraserToolbarItem />
             <CustomDrawToolbarItem />
@@ -758,10 +893,61 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             <ArrowUpToolbarItem />
             <ArrowDownToolbarItem />
             <ArrowRightToolbarItem />
-            <FrameToolbarItem />
-          </DefaultToolbar>
+            </>
         )
     }
+
+    /* Broken due to import issues
+    *
+    // Set up toolbar to inclide playback panel
+    // copy/pasted from ui/components/Toolbar/DefaultToolbar.tsx
+    // then modified to include one new element---the playback panel---at the end
+    const CustomToolbar = memo(function DefaultToolbar({ children }: DefaultToolbarProps) {
+        const editor = useEditor()
+        const breakpoint = useBreakpoint()
+        const isReadonlyMode = useReadonly()
+        const activeToolId = useValue('current tool id', () => editor.getCurrentToolId(), [editor])
+
+        const { ActionsMenu, QuickActions } = useTldrawUiComponents()
+
+        return (
+            <div className="tlui-toolbar">
+                <div className="tlui-toolbar__inner">
+                    <div className="tlui-toolbar__left">
+                        {!isReadonlyMode && (
+                            <div className="tlui-toolbar__extras">
+                                {breakpoint < PORTRAIT_BREAKPOINT.TABLET && (
+                                    <div className="tlui-toolbar__extras__controls tlui-buttons__horizontal">
+                                        {QuickActions && <QuickActions />}
+                                        {ActionsMenu && <ActionsMenu />}
+                                    </div>
+                                )}
+                                <ToggleToolLockedButton activeToolId={activeToolId} />
+                            </div>
+                        )}
+                        <OverflowingToolbar>{children ?? <CustomToolbarContent />}</OverflowingToolbar>
+                    </div>
+                    {breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM && !isReadonlyMode && (
+                        <div className="tlui-toolbar__tools">
+                            <MobileStylePanel />
+                            <PlaybackPanel />
+                        </div>
+                    )}
+                </div>
+            </div>
+        )
+    })
+    */
+    function CustomToolbar() {
+        return (
+            <DefaultToolbar>
+                <CustomToolbarContent />
+                <PlaybackPanel />
+            </DefaultToolbar>
+        )
+    }
+
+    
 
     if (isReady) {
         return (
@@ -803,6 +989,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                     }
                 }}
                 >
+                <HistorySlider />
             </Tldraw>
         )
     }
