@@ -438,8 +438,8 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                 if(!(event.touches !== undefined && event.touches[0].touchType === "stylus")) {
                     const now = Date.now()
                     // if it's our second in 500ms enter editing mode
-                    // ignore second taps within 100ms, as they're usually different fingers making a multi-touch gesture like pinch-to-zoom
-                    if (lastTap + 100 <= now && now < lastTap + 500) { 
+                    // ignore second taps within 200ms, as they're usually different fingers making a multi-touch gesture like pinch-to-zoom
+                    if (lastTap + 200 <= now && now < lastTap + 500) { 
                         event.preventDefault()
                         setIsEditing(true) 
                     }
