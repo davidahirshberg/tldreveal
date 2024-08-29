@@ -864,8 +864,16 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     const CustomDrawToolbarItem = pemp(DrawToolbarItem)
     const CustomHighlightToolbarItem = pemp(HighlightToolbarItem)
     const CustomLaserToolbarItem = pemp(LaserToolbarItem)
+    const CustomArrowToolbarItem = pemp(ArrowToolbarItem)
     const removeTools = ['hand'];
 
+    function CustomToolbar() {
+        return (
+            <DefaultToolbar>
+                <CustomToolbarContent />
+            </DefaultToolbar>
+        )
+    }
     function CustomToolbarContent() {
         return (
         <>
@@ -874,7 +882,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             <CustomDrawToolbarItem />
             <CustomHighlightToolbarItem />
             <CustomLaserToolbarItem />
-            <ArrowToolbarItem />
+            <CustomArrowToolbarItem />
             <TextToolbarItem />
             <LineToolbarItem />
             <NoteToolbarItem />
@@ -897,6 +905,7 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
             </>
         )
     }
+    
 
     /* Broken due to import issues
     *
@@ -939,16 +948,8 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         )
     })
     */
-    function CustomToolbar() {
-        return (
-            <DefaultToolbar>
-                <CustomToolbarContent />
-                <PlaybackPanel />
-            </DefaultToolbar>
-        )
-    }
 
-    
+
 
     if (isReady) {
         return (
@@ -990,7 +991,6 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                     }
                 }}
                 >
-               { /* <HistorySlider /> */ }
             </Tldraw>
         )
     }
