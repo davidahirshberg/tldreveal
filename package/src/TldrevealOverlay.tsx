@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { fileSave } from "browser-fs-access"
-
+import { useAtom } from "signia-react"
 import { Api as RevealApi } from "reveal.js"
 
 import {
@@ -77,7 +77,6 @@ import {
     LaserToolbarItem,
     FrameToolbarItem
 } from "tldraw";
-import { useAtom } from "@tldraw/state"
 
 import { debounce, makeInt, parseOptionalBoolean } from "./util"
 import { defaultStyleProps, getTldrevealConfig } from "./config";
@@ -211,19 +210,8 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
 
     const [store] = useState(() => createTLStore({ shapeUtils: defaultShapeUtils }))
     const [editor, setEditor] = useState<Editor | undefined>()
-
-    // BROKEN IN NEW VERSION OF TLDRAW ?
-    // Use a local user preferences atom, to prevent sharing dark mode status
-    // across multiple instances
-    // const userPreferences = useAtom<TLUserPreferences>("userPreferences", { id: "tldreveal", isDarkMode: config.isDarkMode })
-    // const [isolatedUser] = useState(() => createTLUser({ userPreferences, setUserPreferences: userPreferences.set }))
-    // TEMPORARY FIX
-    const userPreferences = useAtom<TLUserPreferences>("userPreferences", { id: "tldreveal" })
-    const [isolatedUser] = useState(() => createTLUser({ userPreferences, setUserPreferences: userPreferences.set }))
-    
     const [saveToLocalStorage, setSaveToLocalStorage_] = 
         useState(parseOptionalBoolean(localStorage.getItem(saveToLocalStorageKey)) ?? config.useLocalStorage)
-    
     function setSaveToLocalStorage(value: boolean) {
         setSaveToLocalStorage_(value)
         localStorage.setItem(saveToLocalStorageKey, value ? "true" : "false")
@@ -587,26 +575,11 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                     state.editor.getCurrentPageShapeIds().size === 0
 
                 state.editor.setCurrentPage(pageId)
-                // Reset undo/redo to prevent undoing changes on other pages
-                state.editor.history.clear()
 
                 if (deleteOldCurrent) {
                     state.editor.deletePage(oldCurrentPageId)
                 }
             }
-
-            if (config.automaticDarkMode) {
-                const currentSlideClasses = 
-                reveal.getSlide(currentSlide.h, currentSlide.v).classList
-                if (currentSlideClasses.contains("has-dark-background")) {
-                    userPreferences.update(u => ({ ...u, isDarkMode: true }))
-                } else if (currentSlideClasses.contains("has-light-background")) {
-                    userPreferences.update(u => ({ ...u, isDarkMode: false }))
-                } else {
-                    userPreferences.update(u => ({ ...u, isDarkMode: config.isDarkMode }))
-                }
-            }
-
             // Set the bounds correctly on the new page
             syncEditorBounds(state)
         }
@@ -722,123 +695,6 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
         }
     }
 
-    /*
-     * History Playback Stuff
-     * based on https://gist.github.com/steveruizok/232e9bf621e3d2dfaebd4f198c7e69fc
-     */
-    function HistorySlider() {
-        const diffs = useRef<RecordsDiff<TLRecord>[]>([])
-        const pointer = useRef(0)
-        const editor = useEditor()
-
-        const handleSliderChange = (e) => {
-            const events = diffs.current
-            const curr = pointer.current
-            const prevPct = curr / 10000
-
-            const next = e.currentTarget.value
-            const nextPct = next / 10000
-
-            const prevIndex = Math.ceil(prevPct * diffs.current.length)
-            const nextIndex = Math.ceil(nextPct * diffs.current.length)
-
-            if (nextPct === 1 && editor.getInstanceState().isReadonly) {
-                editor.updateInstanceState({ isReadonly: false })
-            } else if (nextPct < 1 && !editor.getInstanceState().isReadonly) {
-                editor.updateInstanceState({ isReadonly: true })
-            }
-
-            pointer.current = next
-
-            editor.store.mergeRemoteChanges(() => {
-                if (nextIndex > prevIndex) {
-                    // console.log('redoing', prevIndex, nextIndex)
-                    for (let i = prevIndex; i <= nextIndex; i++) {
-                        const changes = events[i]
-                        if (!changes) continue
-
-                        Object.values(changes.added).forEach((record) => {
-                            editor.store.put([record])
-                        })
-
-                        Object.values(changes.updated).forEach(([prev, next]) => {
-                            editor.store.put([next])
-                        })
-
-                        Object.values(changes.removed).forEach((record) => {
-                            editor.store.remove([record.id])
-                        })
-                    }
-                } else if (nextIndex < prevIndex) {
-                    // console.log('undoing', prevIndex, nextIndex)
-                    for (let i = prevIndex; i >= nextIndex; i--) {
-                        const changes = events[i]
-                        if (!changes) continue
-
-                        Object.values(changes.added).forEach((record) => {
-                            editor.store.remove([record.id])
-                        })
-
-                        Object.values(changes.updated).forEach(([prev, next]) => {
-                            editor.store.put([prev])
-                        })
-
-                        Object.values(changes.removed).forEach((record) => {
-                            editor.store.put([record])
-                        })
-                    }
-                }
-            })
-        }
-
-        useEffect(() => {
-            return editor.store.listen(({ changes }) => diffs.current.push(changes), {
-                source: 'user',
-                scope: 'document',
-            })
-        }, [editor])
-
-        return (
-            <input
-                type="range"
-                defaultValue="10000"
-                onChange={handleSliderChange}
-                style={{
-                    position: 'absolute',
-                    top: 64,
-                    left: 8,
-                    width: 300,
-                    zIndex: 999,
-                }}
-                min="0"
-                max="10000"
-            />
-        )
-    }
-    
-    function PlaybackPanel() {
-        const editor = useEditor()
-        return (
-            <TldrawUiPopover id="playback menu">
-                <TldrawUiPopoverTrigger>
-                    <TldrawUiButton
-                        type="tool"
-                        data-testid="mobile-styles.button"
-                        title={'Playback'}
-                        disabled={false}
-                    >
-                        <TldrawUiButtonIcon
-                            icon={'cross-2'}
-                        />
-                    </TldrawUiButton>
-                </TldrawUiPopoverTrigger>
-                <TldrawUiPopoverContent side="top" align="end">
-                    <HistorySlider/>
-                </TldrawUiPopoverContent>
-            </TldrawUiPopover>
-        )
-    }
-
     // Other Toolbar Content
     // This is similar to the default, but with 
     // 1. a few items shuffled
@@ -877,79 +733,15 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
     function CustomToolbarContent() {
         return (
         <>
-            <CustomSelectToolbarItem />
-            <CustomEraserToolbarItem />
-            <CustomDrawToolbarItem />
-            <CustomHighlightToolbarItem />
             <CustomLaserToolbarItem />
-            <CustomArrowToolbarItem />
-            <TextToolbarItem />
-            <LineToolbarItem />
-            <NoteToolbarItem />
-            <AssetToolbarItem />
-            <RectangleToolbarItem />
-            <EllipseToolbarItem />
-            <TriangleToolbarItem />
-            <DiamondToolbarItem />
-            <HexagonToolbarItem />
-            <OvalToolbarItem />
-            <RhombusToolbarItem />
-            <StarToolbarItem />
-            <CloudToolbarItem />
-            <XBoxToolbarItem />
-            <CheckBoxToolbarItem />
-            <ArrowLeftToolbarItem />
-            <ArrowUpToolbarItem />
-            <ArrowDownToolbarItem />
-            <ArrowRightToolbarItem />
+            <CustomHighlightToolbarItem />
+            <CustomDrawToolbarItem />
+            <CustomEraserToolbarItem />
+            <CustomSelectToolbarItem />
             </>
         )
     }
     
-
-    /* Broken due to import issues
-    *
-    // Set up toolbar to inclide playback panel
-    // copy/pasted from ui/components/Toolbar/DefaultToolbar.tsx
-    // then modified to include one new element---the playback panel---at the end
-    const CustomToolbar = memo(function DefaultToolbar({ children }: DefaultToolbarProps) {
-        const editor = useEditor()
-        const breakpoint = useBreakpoint()
-        const isReadonlyMode = useReadonly()
-        const activeToolId = useValue('current tool id', () => editor.getCurrentToolId(), [editor])
-
-        const { ActionsMenu, QuickActions } = useTldrawUiComponents()
-
-        return (
-            <div className="tlui-toolbar">
-                <div className="tlui-toolbar__inner">
-                    <div className="tlui-toolbar__left">
-                        {!isReadonlyMode && (
-                            <div className="tlui-toolbar__extras">
-                                {breakpoint < PORTRAIT_BREAKPOINT.TABLET && (
-                                    <div className="tlui-toolbar__extras__controls tlui-buttons__horizontal">
-                                        {QuickActions && <QuickActions />}
-                                        {ActionsMenu && <ActionsMenu />}
-                                    </div>
-                                )}
-                                <ToggleToolLockedButton activeToolId={activeToolId} />
-                            </div>
-                        )}
-                        <OverflowingToolbar>{children ?? <CustomToolbarContent />}</OverflowingToolbar>
-                    </div>
-                    {breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM && !isReadonlyMode && (
-                        <div className="tlui-toolbar__tools">
-                            <MobileStylePanel />
-                            <PlaybackPanel />
-                        </div>
-                    )}
-                </div>
-            </div>
-        )
-    })
-    */
-
-
 
     if (isReady) {
         return (
@@ -957,7 +749,6 @@ export function TldrevealOverlay({ reveal, container }: TldrevealOverlayProps) {
                 forceMobile
                 hideUi={!isEditing} 
                 store={store}
-                user={isolatedUser}
                 onMount={onTldrawMount}
                 components={{
                     PageMenu: null,
